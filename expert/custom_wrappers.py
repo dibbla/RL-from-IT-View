@@ -53,7 +53,7 @@ class SymbolicObsWrapperIDs(ObservationWrapper):
     The symbol is a triple of (X, Y, IDX), where X and Y are
     the coordinates on the grid, and IDX is the id of the object.
 
-    Return: full observation flattened into single vector
+    Return: full observation, in the same shape as grid itself. Entry contains the item
     """
 
     def __init__(self, env):

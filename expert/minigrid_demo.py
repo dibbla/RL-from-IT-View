@@ -1,3 +1,5 @@
+# This file is only used for demonstrating/testing the environments and wrappers
+
 import gymnasium as gym
 import numpy as np
 import minigrid
