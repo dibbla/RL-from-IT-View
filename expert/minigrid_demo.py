@@ -1,13 +1,21 @@
 import gymnasium as gym
 import numpy as np
 import minigrid
+from minigrid.wrappers import FlatObsWrapper, SymbolicObsWrapper
 from minigrid.core.constants import OBJECT_TO_IDX
+from custom_wrappers import SymbolicObsWrapperFlatten
 
-print(f"{OBJECT_TO_IDX=}")
+import matplotlib.pyplot as plt
 
-env = gym.make("MiniGrid-SimpleCrossingS9N1-v0", render_mode="rgb_array")
-env = minigrid.wrappers.SymbolicObsWrapper(env)
-obs, info = env.reset(seed=123)
-r = env.render()
-grid = obs["image"]
-print(grid[np.where(grid[:, :, 2] == OBJECT_TO_IDX["goal"])]) # (7,7,8), x=7 y=7 type=8(goal)
+env = gym.make("MiniGrid-SimpleCrossingS9N1-v0", render_mode='rgb_array')
+env = SymbolicObsWrapperFlatten(env)
+
+obs, _ = env.reset(seed=42)
+
+obs, rew, terminated, truncated, _ = env.step(0)
+done = terminated or truncated
+
+img = env.render()
+plt.imshow(img)
+plt.show()
+print(obs)
