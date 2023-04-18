@@ -1,6 +1,6 @@
 # Gridworld experts
 
-This directory contains way to generate expert trajectories
+This directory contains ways to generate expert trajectories
 
 ```shell
 gridworld_expert

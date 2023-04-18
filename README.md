@@ -9,4 +9,6 @@ A project repository discussing basic Reinforcement Learning algorithms from a I
 - [ ] More training with varying Memeory Equivalent Capacity (MEC)
 
 ## Environment setup
-We use `minigrid` based on `gymnasium`, which is the *"more modern"* version of OpenAI Gym.
+We use 
+1. A customized grid world implemetation based on gym. 
+2. `minigrid` based on `gymnasium`, which is the *"more modern"* version of OpenAI Gym.
