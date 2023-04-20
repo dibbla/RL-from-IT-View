@@ -1,4 +1,4 @@
-# Behavioral Cloning Task Generalization throuhg Network Capacity Reduction
+# Behavioral Cloning Task Generalization through Network Capacity Reduction
 A project repository discussing basic Reinforcement Learning algorithms from a Information Theory View
 
 ## Roadmap
