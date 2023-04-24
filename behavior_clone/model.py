@@ -8,15 +8,14 @@ import csv
 
 # Parse arguments, use testing and csv parameter to enable corresponding function
 parser = argparse.ArgumentParser()
-parser.add_argument('--testing', action='store_true', help='Run the model in test mode')
+parser.add_argument('--test', action='store_true', help='Run the model in test mode')
 parser.add_argument('--csv', action='store_true', help='Generate a CSV file using the expert policy')
 parser.add_argument('--timesteps', type=int, default=20000, help='Number of timesteps to train the model for')
 parser.add_argument('--models_dir', type=str, default='final_models', help='Directory to save trained models')
 parser.add_argument('--logdir', type=str, default='logs', help='Directory to save tensorboard logs')
 args = parser.parse_args()
 
-
-testing = args.testing
+testing = args.test
 csv_generation = args.csv
 TIMESTEPS = args.timesteps
 models_dir = args.models_dir
@@ -53,6 +52,8 @@ for i in range(60):
             writer.writerow(["obs.no", "agent_x", "agent_y", "gem_x", "gem_y", "rewards", "action"])
             obs_no = 1
             done = True
+            # This part keeps generating expert path and save them to .csv file, 
+            # use generator to get a subset for training BC
             while done:
                 action, _ = model.predict(obs)
                 obs, reward, done, info = env.step(action)
