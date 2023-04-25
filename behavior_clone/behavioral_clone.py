@@ -46,13 +46,14 @@ class BC(torch.nn.Module):
         action = self.model(x)
         return action
 
-
 # Training function
 def train_loop(model, dataloader, val_dataloader, optimizer, criterion, device, epochs):
     # Load model and environment
     env = singleEnv()
     env.reset()
-    model_path = f"final_models/380000.zip"
+    
+    # load expert model for evaluation
+    model_path = f"final_models/380000.zip" 
     expert_policy = PPO.load(model_path, env=env)
     model.train()
     for epoch in range(epochs):
