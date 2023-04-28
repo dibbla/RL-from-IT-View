@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from replay_buffer import ReplayBuffer
 from env import singleEnv
+from torch.utils.tensorboard import SummaryWriter
 
 class Q(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -86,7 +87,10 @@ class DQN:
         # count one update
         self.count += 1
 
+        return dqn_loss
+
 if __name__ == '__main__':
+    # set up training
     lr = 2e-3
     num_episodes = 500 # totol episode for training
     hidden_dim = 128
@@ -97,6 +101,9 @@ if __name__ == '__main__':
     minimal_size = 500
     batch_size = 64
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+    # add logger
+    writer = SummaryWriter()
 
     # seeding
     env = singleEnv()
@@ -135,8 +142,11 @@ if __name__ == '__main__':
                             'rewards': b_r,
                             'dones': b_d
                         }
-                        agent.update(transition_dict)
+                        loss = agent.update(transition_dict)
+                        writer.add_scalar('Loss/update_dqn_loss', loss, agent.count)
+
                 return_list.append(episode_return)
+                writer.add_scalar('Return/episode_return', episode_return, i_episode)
                 if (i_episode + 1) % 10 == 0:
                     pbar.set_postfix({
                         'episode':
