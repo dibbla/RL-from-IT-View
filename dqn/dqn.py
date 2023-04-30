@@ -11,6 +11,12 @@ import matplotlib.pyplot as plt
 from replay_buffer import ReplayBuffer
 from env import singleEnv
 from torch.utils.tensorboard import SummaryWriter
+import argparse
+
+argparser = argparse.ArgumentParser()
+argparser.add_argument('--log_csv',action='store_true',help='log csv file or not')
+argparser.add_argument('--whole_buffer',action='store_true',help='sample whole batch or not')
+args = argparser.parse_args()
 
 class Q(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -82,9 +88,10 @@ class DQN:
         # for logging batch q_target
         b_q = q_targets.detach().cpu().numpy()
 
-        df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r, b_q)), 
-                          columns=['state', 'action', 'next_state', 'done', 'reward', 'q_target'])
-        df.to_csv(f'{self.count}.csv', index=False)
+        if args.log_csv:
+            df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r, b_q)), 
+                            columns=['state', 'action', 'next_state', 'done', 'reward', 'q_target'])
+            df.to_csv(f'{self.count}.csv', index=False)
 
         # q-loss
         dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))
@@ -107,13 +114,13 @@ if __name__ == '__main__':
     # set up training
     lr = 2e-3
     num_episodes = 500 # totol episode for training
-    hidden_dim = 128
+    hidden_dim = 48
     gamma = 0.98
     epsilon = 0.01
     target_update = 10
     buffer_size = 10000
     minimal_size = 500
-    batch_size = 64
+    batch_size = 16
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # add logger
@@ -148,7 +155,11 @@ if __name__ == '__main__':
                     episode_return += reward
 
                     if replay_buffer.size() > minimal_size: # if buffer_size > mini_batch_size, update
-                        b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
+                        # b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
+                        if args.whole_buffer:
+                            b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample_whole()
+                        else:
+                            b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                         transition_dict = {
                             'states': b_s,
                             'actions': b_a,
