@@ -6,6 +6,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import pandas as pd
 import matplotlib.pyplot as plt
 from replay_buffer import ReplayBuffer
 from env import singleEnv
@@ -52,6 +53,12 @@ class DQN:
         return action
 
     def update(self, transition_dict):
+        # get data from buffer
+        b_s = transition_dict['states']
+        b_a = transition_dict['actions']
+        b_r = transition_dict['rewards']
+        b_ns = transition_dict['next_states']
+        b_d = transition_dict['dones']
 
         # generate update data
         states = torch.tensor(transition_dict['states'],
@@ -71,6 +78,13 @@ class DQN:
         # compute target q values
         max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
         q_targets = rewards + self.gamma * max_next_q_values * (1 - dones)
+
+        # for logging batch q_target
+        b_q = q_targets.detach().cpu().numpy()
+
+        df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r, b_q)), 
+                          columns=['state', 'action', 'next_state', 'done', 'reward', 'q_target'])
+        df.to_csv(f'{self.count}.csv', index=False)
 
         # q-loss
         dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))
