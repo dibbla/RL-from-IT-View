@@ -1,3 +1,6 @@
+import time
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 import random
 import gym
 import numpy as np
@@ -17,6 +20,8 @@ argparser = argparse.ArgumentParser()
 argparser.add_argument('--log_csv',action='store_true',help='log csv file or not')
 argparser.add_argument('--whole_buffer',action='store_true',help='sample whole batch or not')
 args = argparser.parse_args()
+
+print(f"settings: log_csv={args.log_csv}, whole_buffer={args.whole_buffer}")
 
 class Q(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -113,18 +118,24 @@ class DQN:
 if __name__ == '__main__':
     # set up training
     lr = 2e-3
-    num_episodes = 500 # totol episode for training
+    num_episodes = 100 # totol episode for training
     hidden_dim = 48
     gamma = 0.98
     epsilon = 0.01
     target_update = 10
     buffer_size = 10000
-    minimal_size = 500
-    batch_size = 16
+    minimal_size = 64
+    batch_size = 64
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    # add logger
-    writer = SummaryWriter()
+    # create a directory for logging
+    directory = 'logs/log-' + time.strftime("%Y%m%d-%H%M%S")
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    # create txt file for logging returns
+    f = open(directory + '/returns.txt', 'w')
+    # create txt file for logging losses
+    f2 = open(directory + '/losses.txt', 'w')
 
     # seeding
     env = singleEnv()
@@ -140,43 +151,40 @@ if __name__ == '__main__':
 
     return_list = []
 
-    # two layer loop for visualization
-    for i in range(10):
-        with tqdm(total=int(num_episodes / 10), desc='Iteration %d' % i) as pbar:
-            for i_episode in range(int(num_episodes / 10)):
-                episode_return = 0
-                state = env.reset()
-                done = False
-                while not done:
-                    action = agent.take_action(state)
-                    next_state, reward, done, _ = env.step(action)
-                    replay_buffer.add(state, action, reward, next_state, done)
-                    state = next_state
-                    episode_return += reward
+    # training
+    for i in tqdm(range(num_episodes)):
+        episode_return = 0
+        state = env.reset()
+        done = False
 
-                    if replay_buffer.size() > minimal_size: # if buffer_size > mini_batch_size, update
-                        # b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
-                        if args.whole_buffer:
-                            b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample_whole()
-                        else:
-                            b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
-                        transition_dict = {
-                            'states': b_s,
-                            'actions': b_a,
-                            'next_states': b_ns,
-                            'rewards': b_r,
-                            'dones': b_d
-                        }
-                        loss = agent.update(transition_dict)
-                        writer.add_scalar('Loss/update_dqn_loss', loss, agent.count)
+        # start an episode
+        while not done:
+            action = agent.take_action(state)
+            next_state, reward, done, _ = env.step(action)
+            replay_buffer.add(state, action, reward, next_state, done)
+            state = next_state
+            episode_return += reward
 
-                return_list.append(episode_return)
-                writer.add_scalar('Return/episode_return', episode_return, i_episode)
-                if (i_episode + 1) % 10 == 0:
-                    pbar.set_postfix({
-                        'episode':
-                        '%d' % (num_episodes / 10 * i + i_episode + 1),
-                        'return':
-                        '%.3f' % np.mean(return_list[-10:])
-                    })
-                pbar.update(1)
+            if replay_buffer.size() > minimal_size: # if buffer_size > mini_batch_size, update
+                if args.whole_buffer:
+                    b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample_whole()(batch_size)
+                else:
+                    b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
+                transition_dict = {
+                    'states': b_s,
+                    'actions': b_a,
+                    'rewards': b_r,
+                    'next_states': b_ns,
+                    'dones': b_d
+                }
+                loss = agent.update(transition_dict)
+                f2.write(str(loss.item()) + '\n')
+        return_list.append(episode_return)
+        f.write(str(episode_return) + '\n')
+    
+    print('Training finished.')
+    print('Logging...')
+    # draw return curve
+    plt.plot(return_list)
+    plt.savefig(directory + '/return_curve.png')
+    plt.close()
