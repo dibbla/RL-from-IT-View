@@ -19,6 +19,7 @@ import argparse
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--log_csv',action='store_true',help='log csv file or not')
 argparser.add_argument('--whole_buffer',action='store_true',help='sample whole batch or not')
+argparser.add_argument('--eval',action='store_true',help='evaluate or not')
 args = argparser.parse_args()
 
 print(f"settings: log_csv={args.log_csv}, whole_buffer={args.whole_buffer}")
@@ -62,7 +63,12 @@ class DQN:
             state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
             action = self.q_net(state).argmax().item()
         return action
-
+    
+    def take_action_deterministic(self, state):
+        state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+        action = self.q_net(state).argmax().item()
+        return action
+    
     def update(self, transition_dict):
         # get data from buffer
         b_s = transition_dict['states']
@@ -91,12 +97,8 @@ class DQN:
         q_targets = rewards + self.gamma * max_next_q_values * (1 - dones)
 
         # for logging batch q_target
-        b_q = q_targets.detach().cpu().numpy()
-
         if args.log_csv:
-            df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r, b_q)), 
-                            columns=['state', 'action', 'next_state', 'done', 'reward', 'q_target'])
-            df.to_csv(f'{self.count}.csv', index=False)
+            b_q = q_targets.detach().cpu().numpy()
 
         # q-loss
         dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))
@@ -132,10 +134,17 @@ if __name__ == '__main__':
     directory = 'logs/log-' + time.strftime("%Y%m%d-%H%M%S")
     if not os.path.exists(directory):
         os.makedirs(directory)
+    # create directory for csv logging
+    if args.log_csv:
+        csv_directory = directory + '/csv'
+        if not os.path.exists(csv_directory):
+            os.makedirs(csv_directory)
     # create txt file for logging returns
     f = open(directory + '/returns.txt', 'w')
     # create txt file for logging losses
     f2 = open(directory + '/losses.txt', 'w')
+    #create txt file for logging eval returns
+    f3 = open(directory + '/eval_returns.txt', 'w')
 
     # seeding
     env = singleEnv()
@@ -150,6 +159,7 @@ if __name__ == '__main__':
                 target_update, device)
 
     return_list = []
+    eval_return_list = []
 
     # training
     for i in tqdm(range(num_episodes)):
@@ -165,7 +175,7 @@ if __name__ == '__main__':
             state = next_state
             episode_return += reward
 
-            if replay_buffer.size() > minimal_size: # if buffer_size > mini_batch_size, update
+            if replay_buffer.size() >= minimal_size: # if buffer_size > mini_batch_size, update
                 if args.whole_buffer:
                     b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample_whole()
                 else:
@@ -178,23 +188,47 @@ if __name__ == '__main__':
                     'dones': b_d
                 }
                 loss = agent.update(transition_dict)
-
-                # dump transition_dict to .csv every 5 episodes
-                if i % 5 == 0:
-                    df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r)), 
-                                    columns=['state', 'action', 'next_state', 'done', 'reward'])
-                    # create csv directory
-                    if not os.path.exists(directory + '/csv'):
-                        os.makedirs(directory + '/csv')
-                    df.to_csv(directory + '/csv/' + str(i) + '.csv', index=False)
                 f2.write(str(loss.item()) + '\n')
+
         return_list.append(episode_return)
         f.write(str(episode_return) + '\n')
+
+        # dump transition_dict to .csv every 5 episodes
+        if i % 5 == 0 and replay_buffer.size() > minimal_size:
+            if args.log_csv:
+                df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r)), 
+                                columns=['state', 'action', 'next_state', 'done', 'reward'])
+                # create csv directory
+                if not os.path.exists(directory + '/csv'):
+                    os.makedirs(directory + '/csv')
+                df.to_csv(directory + '/csv/' + str(i) + '.csv', index=False)
+            
+            # evaluate the model every 5 episodes
+            if args.eval:
+                eval_return = 0
+                eval_state = env.reset()
+                eval_done = False
+                force_quit = 0
+                while not eval_done:
+                    force_quit += 1
+                    action = agent.take_action_deterministic(eval_state)
+                    eval_next_state, eval_reward, eval_done, _ = env.step(action)
+                    eval_state = eval_next_state
+                    eval_return += eval_reward
+                    if force_quit > 1000: break
+                eval_return_list.append(eval_return)
+                f3.write(str(eval_return) + '\n')
+            
+            # TODO: add drift evaluation
     
     print('Training finished.')
     print('Logging...')
     # draw return curve
     plt.plot(return_list)
-    plt.yscale('symlog', linthresh=5000)
     plt.savefig(directory + '/return_curve.png')
+    plt.close()
+
+    # draw eval return curve
+    plt.plot(eval_return_list)
+    plt.savefig(directory + '/eval_return_curve.png')
     plt.close()

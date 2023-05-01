@@ -21,9 +21,13 @@ import argparse
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--log_csv',action='store_true',help='log csv file or not')
 argparser.add_argument('--whole_buffer',action='store_true',help='sample whole batch or not')
+argparser.add_argument('--eval_other_env',action='store_true',help='evaluate or not')
+argparser.add_argument('--eval_same_env',action='store_true',help='evaluate or not')
 args = argparser.parse_args()
 
-print(f"settings: log_csv={args.log_csv}, whole_buffer={args.whole_buffer}")
+print(
+    f"settings: log_csv={args.log_csv}, whole_buffer={args.whole_buffer}, eval_other_env={args.eval_other_env}, eval_same_env={args.eval_same_env}"
+    )
 
 class Q(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -63,6 +67,11 @@ class DQN:
         else:
             state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
             action = self.q_net(state).argmax().item()
+        return action
+    
+    def take_action_deterministic(self, state):
+        state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+        action = self.q_net(state).argmax().item()
         return action
 
     def update(self, transition_dict):
@@ -121,7 +130,7 @@ if __name__ == '__main__':
     # set up training
     lr = 2e-3
     num_episodes = 500 # totol episode for training
-    hidden_dim = 48
+    hidden_dim = 128
     gamma = 0.98
     epsilon = 0.01
     target_update = 10
@@ -131,13 +140,17 @@ if __name__ == '__main__':
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # create a directory for logging
-    directory = 'logs/log-' + time.strftime("%Y%m%d-%H%M%S")
+    directory = f'logs/log-hidden-{hidden_dim}-' + time.strftime("%Y%m%d-%H%M%S")
     if not os.path.exists(directory):
         os.makedirs(directory)
     # create txt file for logging returns
     f = open(directory + '/returns.txt', 'w')
     # create txt file for logging losses
     f2 = open(directory + '/losses.txt', 'w')
+    # create txt file for logging evaluation returns
+    f3 = open(directory + '/eval_returns.txt', 'w')
+    # create txt file for logging same env returns
+    f4 = open(directory + '/same_env_returns.txt', 'w')
 
     env = gym.make('MiniGrid-SimpleCrossingS9N1-v0')
 
@@ -149,13 +162,15 @@ if __name__ == '__main__':
     # set up env & agent
     env = FlatObsWrapper(FullyObsWrapper(env))
     replay_buffer = ReplayBuffer(buffer_size)
-    state, _ = env.reset(seed=42)
+    state, _ = env.reset(seed=42) # reset for getting state_dim
     state_dim = state.shape[0]
     action_dim = env.action_space.n
     agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
                 target_update, device)
 
     return_list = []
+    same_env_return_list = []
+    eval_return_list = []
 
     # training
     pbar = tqdm.tqdm(total=num_episodes)
@@ -186,16 +201,47 @@ if __name__ == '__main__':
                     'dones': b_d
                 }
                 loss = agent.update(transition_dict)
-
-                # dump transition_dict to .csv every 5 episodes
-                if i % 5 == 0 and args.log_csv:
-                    df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r)), 
-                                    columns=['state', 'action', 'next_state', 'done', 'reward'])
-                    # create csv directory
-                    if not os.path.exists(directory + '/csv'):
-                        os.makedirs(directory + '/csv')
-                    df.to_csv(directory + '/csv/' + str(i) + '.csv', index=False)
                 f2.write(str(loss.item()) + '\n')
+
+        # dump transition_dict to .csv every 5 episodes
+        if i % 5 == 0 and args.log_csv:
+            df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r)), 
+                            columns=['state', 'action', 'next_state', 'done', 'reward'])
+            # create csv directory
+            if not os.path.exists(directory + '/csv'):
+                os.makedirs(directory + '/csv')
+            df.to_csv(directory + '/csv/' + str(i) + '.csv', index=False)
+
+        # evaluate every 5 episodes on same envs
+        if i % 5 == 0 and args.eval_same_env:
+
+            eval_done = False
+            eval_return = 0
+            eval_state, _ = env.reset(seed=42) # same seed for evaluation
+            while not eval_done:
+                action = agent.take_action_deterministic(eval_state)
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                eval_done = terminated or truncated
+                eval_return += reward
+                eval_state = next_state
+            # print(f'Evaluation return: {eval_return}')
+            f4.write(str(eval_return) + '\n')
+            same_env_return_list.append(eval_return)
+
+        # evaluate every 5 episodes on other envs
+        if i % 5 == 0 and args.eval_other_env:
+            eval_done = False
+            eval_return = 0
+            eval_state, _ = env.reset(seed=1)
+            while not eval_done:
+                action = agent.take_action_deterministic(eval_state)
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                eval_done = terminated or truncated
+                eval_return += reward
+                eval_state = next_state
+            # print(f'Evaluation return: {eval_return}')
+            f3.write(str(eval_return) + '\n')
+            eval_return_list.append(eval_return)
 
         pbar.write(f'Return:{episode_return}')
         pbar.update(1)
@@ -205,7 +251,19 @@ if __name__ == '__main__':
     print('Training finished.')
     print('Logging...')
     
+    # smooth return curve by averaging with window size 5
+    return_list = np.array(return_list)
+    # smoothe
+    return_list = np.convolve(return_list, np.ones(5), 'valid') / 5
+
     # draw return curve
     plt.plot(return_list)
     plt.savefig(directory + '/return_curve.png')
+    # draw evaluation return curve
+    plt.plot(eval_return_list)
+    plt.savefig(directory + '/eval_return_curve.png')
+    plt.close()
+    # draw same env return curve
+    plt.plot(same_env_return_list)
+    plt.savefig(directory + '/same_env_return_curve.png')
     plt.close()
