@@ -2,16 +2,18 @@ import time
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 import random
-import gym
+import gymnasium as gym
 import numpy as np
 import collections
-from tqdm import tqdm
+import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import matplotlib.pyplot as plt
 from replay_buffer import ReplayBuffer
+import minigrid
+from minigrid.wrappers import FlatObsWrapper, SymbolicObsWrapper, FullyObsWrapper
 from env import singleEnv
 from torch.utils.tensorboard import SummaryWriter
 import argparse
@@ -118,14 +120,14 @@ class DQN:
 if __name__ == '__main__':
     # set up training
     lr = 2e-3
-    num_episodes = 300 # totol episode for training
+    num_episodes = 500 # totol episode for training
     hidden_dim = 48
     gamma = 0.98
     epsilon = 0.01
     target_update = 10
     buffer_size = 10000
-    minimal_size = 64
-    batch_size = 64
+    minimal_size = 128
+    batch_size = 128
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # create a directory for logging
@@ -137,14 +139,18 @@ if __name__ == '__main__':
     # create txt file for logging losses
     f2 = open(directory + '/losses.txt', 'w')
 
+    env = gym.make('MiniGrid-SimpleCrossingS9N1-v0')
+
     # seeding
-    env = singleEnv()
     random.seed(0)
     np.random.seed(0)
-    env.seed(0)
     torch.manual_seed(0)
+
+    # set up env & agent
+    env = FlatObsWrapper(FullyObsWrapper(env))
     replay_buffer = ReplayBuffer(buffer_size)
-    state_dim = env.observation_space.shape[0]
+    state, _ = env.reset(seed=42)
+    state_dim = state.shape[0]
     action_dim = env.action_space.n
     agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
                 target_update, device)
@@ -152,15 +158,17 @@ if __name__ == '__main__':
     return_list = []
 
     # training
-    for i in tqdm(range(num_episodes)):
+    pbar = tqdm.tqdm(total=num_episodes)
+    for i in range(num_episodes):
         episode_return = 0
-        state = env.reset()
+        state, _ = env.reset(seed=42)
         done = False
 
         # start an episode
         while not done:
             action = agent.take_action(state)
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
             replay_buffer.add(state, action, reward, next_state, done)
             state = next_state
             episode_return += reward
@@ -180,7 +188,7 @@ if __name__ == '__main__':
                 loss = agent.update(transition_dict)
 
                 # dump transition_dict to .csv every 5 episodes
-                if i % 5 == 0:
+                if i % 5 == 0 and args.log_csv:
                     df = pd.DataFrame(list(zip(b_s, b_a, b_ns, b_d, b_r)), 
                                     columns=['state', 'action', 'next_state', 'done', 'reward'])
                     # create csv directory
@@ -188,13 +196,16 @@ if __name__ == '__main__':
                         os.makedirs(directory + '/csv')
                     df.to_csv(directory + '/csv/' + str(i) + '.csv', index=False)
                 f2.write(str(loss.item()) + '\n')
+
+        pbar.write(f'Return:{episode_return}')
+        pbar.update(1)
         return_list.append(episode_return)
         f.write(str(episode_return) + '\n')
     
     print('Training finished.')
     print('Logging...')
+    
     # draw return curve
     plt.plot(return_list)
-    plt.yscale('symlog', linthresh=5000)
     plt.savefig(directory + '/return_curve.png')
     plt.close()
