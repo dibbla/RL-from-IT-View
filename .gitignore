@@ -1,2 +1,6 @@
 behavior_clone/final_models
 behavior_clone/logs
+dqn/runs
+dqn/logs
+dqn_minigrid/logs
+dqn_test_field/

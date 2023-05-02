@@ -15,6 +15,12 @@ class ReplayBuffer:
         state, action, reward, next_state, done = zip(*transitions)
         return np.array(state), action, reward, np.array(next_state), done
 
+    def sample_whole(self):
+        # fist shuffle the buffer
+        random.shuffle(self.buffer)
+        state, action, reward, next_state, done = zip(*self.buffer)
+        return np.array(state), action, reward, np.array(next_state), done
+
     def dump(self, filename):
         """
         Dump the buffer into .csv file so brainome can be used
