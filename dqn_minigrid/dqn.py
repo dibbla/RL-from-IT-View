@@ -126,13 +126,14 @@ class DQN:
         return dqn_loss
 
 if __name__ == '__main__':
-    for hidden in [32,64,128]:
+    for hidden in [72,128]:
+        print(f">>>>>>>>>>>>>>>>>>>>>>>>>>hidden:{hidden}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         # set up training
         lr = 2e-3
         num_episodes = args.episodes # totol episode for training
         hidden_dim = hidden
         gamma = 0.98
-        epsilon = 0.01
+        epsilon = 0.05
         target_update = 10
         buffer_size = 10000
         minimal_size = 128
@@ -140,7 +141,7 @@ if __name__ == '__main__':
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
         # create a directory for logging
-        directory = f'logs/swipe-log-hidden-{hidden_dim}-' + time.strftime("%Y%m%d-%H%M%S")
+        directory = f'logs/swipe-log-' +time.strftime("%Y%m%d-%H%M%S") + f'hidden-{hidden_dim}' 
         if not os.path.exists(directory):
             os.makedirs(directory)
         # create txt file for logging returns
@@ -151,10 +152,13 @@ if __name__ == '__main__':
         f3 = open(directory + '/eval_returns.txt', 'w')
         # create txt file for logging same env returns
         f4 = open(directory + '/same_env_returns.txt', 'w')
+        # add one txt file tracing buffer size
+        f5 = open(directory + '/buffer_size.txt', 'w')
 
-        env = gym.make('MiniGrid-Empty-5x5-v0')
+        env = gym.make('MiniGrid-Empty-Random-6x6-v0')
 
         # seeding
+        train_seed = 3 # this fix the agent to the upper left corner
         random.seed(0)
         np.random.seed(0)
         torch.manual_seed(0)
@@ -162,7 +166,7 @@ if __name__ == '__main__':
         # set up env & agent
         env = FlatObsWrapper(FullyObsWrapper(env))
         replay_buffer = ReplayBuffer(buffer_size)
-        state, _ = env.reset(seed=42) # reset for getting state_dim
+        state, _ = env.reset(seed=train_seed) # reset for getting state_dim
         state_dim = state.shape[0]
         action_dim = env.action_space.n
         agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
@@ -176,13 +180,14 @@ if __name__ == '__main__':
         pbar = tqdm.tqdm(total=args.episodes, desc='Training', leave=True)
         for i in range(args.episodes):
             episode_return = 0
-            state, _ = env.reset(seed=42)
+            state, _ = env.reset(seed=train_seed)
             done = False
 
             # start an episode
             while not done:
                 action = agent.take_action(state)
                 next_state, reward, terminated, truncated, _ = env.step(action)
+                # env.render()
                 done = terminated or truncated
                 replay_buffer.add(state, action, reward, next_state, done)
                 state = next_state
@@ -216,7 +221,7 @@ if __name__ == '__main__':
             if i % 5 == 0 and args.eval_same_env:
                 eval_done = False
                 eval_return = 0
-                eval_state, _ = env.reset(seed=42) # same seed for evaluation
+                eval_state, _ = env.reset(seed=train_seed) # same seed for evaluation
                 while not eval_done:
                     action = agent.take_action_deterministic(eval_state)
                     next_state, reward, terminated, truncated, _ = env.step(action)
@@ -229,18 +234,25 @@ if __name__ == '__main__':
 
             # evaluate every 5 episodes on other envs
             if i % 5 == 0 and args.eval_other_env:
-                eval_done = False
-                eval_return = 0
-                eval_state, _ = env.reset(seed=1)
-                while not eval_done:
-                    action = agent.take_action_deterministic(eval_state)
-                    next_state, reward, terminated, truncated, _ = env.step(action)
-                    eval_done = terminated or truncated
-                    eval_return += reward
-                    eval_state = next_state
-                # print(f'Evaluation return: {eval_return}')
-                f3.write(str(eval_return) + '\n')
-                eval_return_list.append(eval_return)
+                avg_return = 0
+                for seed in [0,1,2]:
+                    eval_done = False
+                    eval_return = 0
+                    eval_state, _ = env.reset(seed=seed)
+                    while not eval_done:
+                        action = agent.take_action_deterministic(eval_state)
+                        next_state, reward, terminated, truncated, _ = env.step(action)
+                        eval_done = terminated or truncated
+                        eval_return += reward
+                        eval_state = next_state
+                    # print(f'Evaluation return: {eval_return}')
+                    avg_return += eval_return
+                avg_return /= 5
+                f3.write(str(avg_return) + '\n')
+                eval_return_list.append(avg_return)
+            
+            # log buffer size
+            f5.write(str(replay_buffer.size()) + '\n')
 
             pbar.write(f'Return:{episode_return}')
             pbar.update(1)
