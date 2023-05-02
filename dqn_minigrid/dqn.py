@@ -14,8 +14,6 @@ import matplotlib.pyplot as plt
 from replay_buffer import ReplayBuffer
 import minigrid
 from minigrid.wrappers import FlatObsWrapper, SymbolicObsWrapper, FullyObsWrapper
-from env import singleEnv
-from torch.utils.tensorboard import SummaryWriter
 import argparse
 
 argparser = argparse.ArgumentParser()
@@ -129,7 +127,7 @@ class DQN:
 if __name__ == '__main__':
     # set up training
     lr = 2e-3
-    num_episodes = 500 # totol episode for training
+    num_episodes = 700 # totol episode for training
     hidden_dim = 128
     gamma = 0.98
     epsilon = 0.01
@@ -152,7 +150,7 @@ if __name__ == '__main__':
     # create txt file for logging same env returns
     f4 = open(directory + '/same_env_returns.txt', 'w')
 
-    env = gym.make('MiniGrid-SimpleCrossingS9N1-v0')
+    env = gym.make('MiniGrid-Empty-5x5-v0')
 
     # seeding
     random.seed(0)
@@ -214,7 +212,6 @@ if __name__ == '__main__':
 
         # evaluate every 5 episodes on same envs
         if i % 5 == 0 and args.eval_same_env:
-
             eval_done = False
             eval_return = 0
             eval_state, _ = env.reset(seed=42) # same seed for evaluation
@@ -256,14 +253,19 @@ if __name__ == '__main__':
     # smoothe
     return_list = np.convolve(return_list, np.ones(5), 'valid') / 5
 
-    # draw return curve
+    # draw 3 separate plots
+    plt.figure()
     plt.plot(return_list)
-    plt.savefig(directory + '/return_curve.png')
-    # draw evaluation return curve
-    plt.plot(eval_return_list)
-    plt.savefig(directory + '/eval_return_curve.png')
-    plt.close()
-    # draw same env return curve
+    plt.title('Return')
+    plt.savefig(directory + '/return.png')
+
+    plt.figure()
     plt.plot(same_env_return_list)
-    plt.savefig(directory + '/same_env_return_curve.png')
-    plt.close()
+    plt.title('Same Env Return')
+    plt.savefig(directory + '/same_env_return.png')
+
+    plt.figure()
+    plt.plot(eval_return_list)
+    plt.title('Eval Return')
+    plt.savefig(directory + '/eval_return.png')
+
