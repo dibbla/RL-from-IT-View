@@ -126,7 +126,7 @@ class DQN:
         return dqn_loss
 
 if __name__ == '__main__':
-    for hidden in [72,128]:
+    for hidden in [8]:
         print(f">>>>>>>>>>>>>>>>>>>>>>>>>>hidden:{hidden}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         # set up training
         lr = 2e-3
@@ -171,6 +171,7 @@ if __name__ == '__main__':
         action_dim = env.action_space.n
         agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
                     target_update, device)
+        print(f'Agent setting: state_dim={state_dim}, action_dim={action_dim}, hidden_dim={hidden_dim}')
 
         return_list = []
         same_env_return_list = []
