@@ -6,8 +6,8 @@ A project repository discussing basic Reinforcement Learning algorithms from a I
 - [x] Generate expert trajectories with common baseline algorithms
 - [x] Track MEC + Validation accuracy of expert trajectories using Brainome
 - [x] Run Behavior Clone on expert trajectories (no data-drifting)
-- [ ] Run DQN on maze environment directly (data-drifting)
-- [ ] More training with varying Memeory Equivalent Capacity (MEC)
+- [x] Run DQN on maze environment directly (data-drifting)
+- [x] More training with varying Memeory Equivalent Capacity (MEC)
 
 ## Environment setup
 We use 
