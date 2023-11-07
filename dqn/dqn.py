@@ -101,7 +101,7 @@ class DQN:
             b_q = q_targets.detach().cpu().numpy()
 
         # q-loss
-        dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))
+        dqn_loss = F.mse_loss(q_values, q_targets)
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
